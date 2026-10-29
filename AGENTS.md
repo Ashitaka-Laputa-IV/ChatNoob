@@ -24,6 +24,7 @@ Do not invent build/test/lint commands. Once tests or linters are added, record 
 - Python dependencies are declared in `pyproject.toml` and locked in `uv.lock`; add packages with `uv add` rather than editing by hand.
 - Secrets live in `.env` (git-ignored, holds `DEEPSEEK_API_KEY`). Never commit real keys; keep `.env.example` as the template with empty values.
 - Keep verification proportionate: a single quick run that proves the feature works is enough; don't add tests or defensive checks nobody asked for.
+- The shell here strips double quotes from arguments, so `git commit -m "msg"` fails. Write the message to a temp file and run `git commit -F <file>`.
 
 ## Documentation lookup
 
