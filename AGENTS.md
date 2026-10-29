@@ -1,35 +1,40 @@
 # AGENTS.md
 
-## Repository status
-
-ChatNoob is a Python 3.14 project managed with `uv` (package `chatnoob`, layout `src/chatnoob`). It is early stage: a single `main()` entry point and no tests or linters yet.
+ChatNoob is a Python 3.14 project managed with `uv` (package `chatnoob`, layout `src/chatnoob`). Early stage: one `main()` entry point, no tests or linters.
 
 ## Commands
 
-Environment is managed with `uv`; `.venv` is local and git-ignored.
+`.venv` is local and git-ignored.
 
-- Install/sync dependencies: `uv sync`
-- Run the app: `uv run chatnoob`
-- Add a dependency: `uv add <package>`
-- Pin the interpreter: `uv venv --python 3.14`
-- Test: none configured yet
-- Lint/format: none configured yet
-- Typecheck: none configured yet
-
-Do not invent build/test/lint commands. Once tests or linters are added, record the exact commands here, including how to run a single test.
+- Run: `uv run chatnoob`
+- Sync: `uv sync`
+- Add dependency: `uv add <package>`
+- Pin interpreter: `uv venv --python 3.14`
+- Test/lint/typecheck: none configured. Don't invent commands; record the exact ones here once added.
 
 ## Conventions
 
-- `.gitattributes` uses `* text=auto`, so Git normalizes text files to LF in the index. Keep committed files LF and avoid introducing CRLF churn.
-- Python dependencies are declared in `pyproject.toml` and locked in `uv.lock`; add packages with `uv add` rather than editing by hand.
-- Secrets live in `.env` (git-ignored, holds `DEEPSEEK_API_KEY`). Never commit real keys; keep `.env.example` as the template with empty values.
-- Keep verification proportionate: a single quick run that proves the feature works is enough; don't add tests or defensive checks nobody asked for.
-- The shell here strips double quotes from arguments, so `git commit -m "msg"` fails. Write the message to a temp file and run `git commit -F <file>`.
+- Add packages with `uv add` (updates `pyproject.toml` and `uv.lock`); don't edit them by hand.
+- Keep committed files LF (`.gitattributes` is `* text=auto`) to avoid CRLF churn.
+- Secrets live in git-ignored `.env` (`DEEPSEEK_API_KEY`); keep `.env.example` empty.
+- Verify proportionately: one quick run that proves the feature works.
+
+## Shell quirks
+
+The shell splits arguments on spaces even inside quotes, and the quote characters leak into the first token. So `uv run python -c "import sys"` fails (`SyntaxError: unterminated string literal`), `git commit -m "my msg"` leaks words into pathspecs, and `rg "two words"` truncates the pattern.
+
+- Pipe multi-word code through stdin; this needs no writes, so it is the only option in plan mode:
+  - `echo import sys; print(sys.version) | uv run python -`
+  - `echo print('a b') | uv run python -`
+  - Multi-line: `echo exec('import sys\nprint(sys.version)') | uv run python -`
+- Otherwise write a temp file in `C:\Users\Ashit\AppData\Local\Temp\opencode\` (no spaces) and run `uv run python <path>`; delete it after.
+- Git: write the message to a temp file, then `git commit -F <file>`.
+- Never retry a failed command with different quote styles; switch to a pipe or a file.
+- Piped code must avoid `|`, `<`, `>`, `&`, `%`, `^`; a leading `(` is cmd grouping and fails.
 
 ## Documentation lookup
 
-The project has the official LangChain docs MCP server configured (`docs-langchain` in `opencode.json`, endpoint `https://docs.langchain.com/mcp`).
+LangChain docs MCP servers are configured in `opencode.json` (`docs-langchain`, `reference-langchain`).
 
-- When a task involves LangChain, LangGraph, or LangSmith usage or configuration, query this MCP first instead of relying on memory.
-- Prefer its returned content over prior knowledge for version-sensitive details, and mention the relevant docs page when answering.
-- Report inaccurate or outdated pages via the server's `submit_feedback` tool.
+- Query them before relying on memory for LangChain/LangGraph/LangSmith usage or versions, and cite the page.
+- Report wrong or outdated pages through `submit_feedback`.

@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from dotenv import load_dotenv
 from langchain.agents import create_agent
+from langchain.agents.middleware import SummarizationMiddleware
 from langchain.chat_models import init_chat_model
 from langgraph.checkpoint.memory import InMemorySaver
 from rich.console import Console, Group
@@ -27,10 +28,19 @@ def main() -> None:
     load_dotenv()
 
     console = Console()
+    model = init_chat_model(MODEL)
     agent = create_agent(
-        init_chat_model(MODEL),
+        model,
         system_prompt=SYSTEM_PROMPT,
         checkpointer=InMemorySaver(),  # 内存版记忆，进程退出即消失
+        middleware=[
+            # 历史超过 20 条消息时把更早的对话压成摘要，只保留最近 10 条
+            SummarizationMiddleware(
+                model=model,
+                trigger=("messages", 20),
+                keep=("messages", 10),
+            ),
+        ],
     )
     config = {"configurable": {"thread_id": str(uuid4())}}
 
