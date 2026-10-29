@@ -34,11 +34,11 @@ def main() -> None:
         system_prompt=SYSTEM_PROMPT,
         checkpointer=InMemorySaver(),  # 内存版记忆，进程退出即消失
         middleware=[
-            # 历史超过 20 条消息时把更早的对话压成摘要，只保留最近 10 条
+            # 历史超过 20 条消息时把更早的对话压成摘要, 保留最近两条.
             SummarizationMiddleware(
                 model=model,
                 trigger=("messages", 20),
-                keep=("messages", 10),
+                keep=("messages", 2),
             ),
         ],
     )
@@ -70,6 +70,7 @@ def main() -> None:
             version="v3",
         )
         reply = ""
+        summary = ""
         with Live(
             Group(REPLY_LABEL, Text("思考中…", style="dim")),
             console=console,
@@ -77,7 +78,19 @@ def main() -> None:
             vertical_overflow="visible",
         ) as live:
             for ai_message in stream.messages:
+                if ai_message.node != "model":
+                    # 摘要等中间件内部调用单独打印，不混进回答
+                    summary += "".join(ai_message.text)
+                    continue
                 for delta in ai_message.text:
                     reply += delta
                     live.update(Group(REPLY_LABEL, Markdown(reply)))
         console.print()
+        if summary.strip():
+            console.print(Panel(
+                Markdown(summary.strip()),
+                title="[dim]较早的对话已压缩为摘要[/]",
+                border_style="dim",
+                style="dim",
+                padding=(0, 1),
+            ))

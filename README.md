@@ -14,7 +14,7 @@ uv run chatnoob
 
 - `init_chat_model("deepseek:deepseek-chat")` + `create_agent`，消息由 `MessagesState` 管理
 - `InMemorySaver` 提供内存记忆（按 `thread_id` 保存，进程退出即清空）
-- `SummarizationMiddleware` 在历史超过 20 条消息时自动把较早对话摘要压缩，只保留最近 10 条
+- `SummarizationMiddleware` 在历史超过 20 条消息时自动把较早对话摘要压缩，只保留最近 10 条；摘要单独以暗色面板打印，不混进回答
 - `stream_events(..., version="v3")` 流式输出，Rich `Live` + `Markdown` 实时渲染
 - 命令：`/clear` 换新 `thread_id` 清空记忆，`/exit` 退出
 
