@@ -1,0 +1,22 @@
+[project]
+name = "chatnoob"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Ashitaka-Laputa-IV", email = "Ashitaka-Laputa-IV@outlook.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "langchain>=1.4.7",
+    "langchain-deepseek>=1.1.1",
+    "python-dotenv>=1.2.4",
+    "rich>=15.0.0",
+]
+
+[project.scripts]
+chatnoob = "chatnoob:main"
+
+[build-system]
+requires = ["uv_build>=0.13.6,<0.14.0"]
+build-backend = "uv_build"
