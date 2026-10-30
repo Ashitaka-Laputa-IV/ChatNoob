@@ -20,7 +20,9 @@ uv run chatnoob-serve   # HTTP 服务 + 前端，默认 127.0.0.1:8000
 
 - 首页输入用户名「登录」（无鉴权，名字即身份）
 - 左栏是该用户的会话列表，可新建、切换、删除
-- 主区域是对话，助手回复通过 SSE 逐字流式显示
+- 主区域是对话，助手回复通过 SSE 逐字流式显示，并按 Markdown 渲染（表格、列表、引用等）
+- 代码块带语言标签与复制按钮，由 highlight.js 高亮；用户消息保持纯文本
+- Markdown / 高亮 / 消毒库以静态文件放在 `src/chatnoob/static/vendor/`（版本见 `VENDOR.md`），无构建步骤、可离线
 
 前端是原生 HTML/CSS/JS，放在 `src/chatnoob/static/`，由 FastAPI 直接托管，不需要构建步骤。
 

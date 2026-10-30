@@ -104,6 +104,80 @@ async function deleteSession(session) {
 
 const LABELS = { user: () => state.user, assistant: "ChatNoob", summary: "摘要", tool: "工具", system: "系统" };
 
+const ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" };
+const escapeHtml = (text) => text.replace(/[&<>"]/g, (char) => ESCAPES[char]);
+
+const markdown = new marked.Marked({ gfm: true, breaks: true });
+markdown.use({
+  renderer: {
+    code({ text, lang }) {
+      const language = (lang || "").trim().split(/\s+/)[0].toLowerCase();
+      const known = language && hljs.getLanguage(language);
+      const html = known
+        ? hljs.highlight(text, { language, ignoreIllegals: true }).value
+        : hljs.highlightAuto(text).value;
+      const label = escapeHtml(language || "text");
+      return (
+        '<div class="code-block">' +
+        '<div class="code-head">' +
+        `<span>${label}</span>` +
+        '<button type="button" class="copy-code">复制</button>' +
+        "</div>" +
+        `<pre><code class="hljs language-${label}">${html}</code></pre>` +
+        "</div>"
+      );
+    },
+    link({ href, title, tokens }) {
+      const text = this.parser.parseInline(tokens);
+      const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
+      return `<a href="${escapeHtml(href)}"${titleAttr}>${text}</a>`;
+    },
+  },
+});
+
+function renderMarkdown(container, text) {
+  container.innerHTML = DOMPurify.sanitize(markdown.parse(text), {
+    ADD_TAGS: ["button"],
+    ADD_ATTR: ["type"],
+  });
+  for (const link of container.querySelectorAll("a")) {
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+  }
+}
+
+function scrollToBottom() {
+  messagesView.scrollTop = messagesView.scrollHeight;
+}
+
+function markdownStream(body) {
+  let text = "";
+  let frame = 0;
+  const paint = () => {
+    frame = 0;
+    renderMarkdown(body, text);
+    scrollToBottom();
+  };
+  return {
+    push(delta) {
+      text += delta;
+      if (!frame) frame = requestAnimationFrame(paint);
+    },
+    finish() {
+      if (frame) cancelAnimationFrame(frame);
+      frame = 0;
+      renderMarkdown(body, text);
+      scrollToBottom();
+    },
+    error(detail) {
+      if (frame) cancelAnimationFrame(frame);
+      frame = 0;
+      text = "";
+      body.textContent = `出错了：${detail}`;
+    },
+  };
+}
+
 function addMessage(role, text) {
   const wrap = document.createElement("div");
   wrap.className = `msg ${role}`;
@@ -115,17 +189,39 @@ function addMessage(role, text) {
 
   const body = document.createElement("div");
   body.className = "body";
-  body.textContent = text;
+  if (role === "assistant") {
+    body.classList.add("md");
+    renderMarkdown(body, text);
+  } else {
+    body.classList.add("plain");
+    body.textContent = text;
+  }
 
   wrap.append(who, body);
   messagesView.append(wrap);
-  messagesView.scrollTop = messagesView.scrollHeight;
+  scrollToBottom();
   return body;
 }
 
+messagesView.addEventListener("click", async (event) => {
+  const button = event.target.closest(".copy-code");
+  if (!button) return;
+  const code = button.closest(".code-block")?.querySelector("code");
+  if (!code) return;
+  try {
+    await navigator.clipboard.writeText(code.innerText);
+    button.textContent = "已复制";
+  } catch {
+    button.textContent = "复制失败";
+  }
+  setTimeout(() => {
+    button.textContent = "复制";
+  }, 1500);
+});
+
 /* ---------- SSE ---------- */
 
-function handleFrame(frame, body) {
+function handleFrame(frame, stream) {
   let event = "message";
   let data = "";
   for (const line of frame.split("\n")) {
@@ -135,15 +231,14 @@ function handleFrame(frame, body) {
   if (!data) return;
   const payload = JSON.parse(data);
   if (event === "token") {
-    body.textContent += payload.text;
-    messagesView.scrollTop = messagesView.scrollHeight;
+    stream.push(payload.text);
   } else if (event === "summary") {
     addMessage("summary", payload.text);
   } else if (event === "done" && state.session === null) {
     state.session = payload.session;
     renderSessions();
   } else if (event === "error") {
-    body.textContent = `出错了：${payload.detail}`;
+    stream.error(payload.detail);
   }
 }
 
@@ -152,6 +247,7 @@ async function send(text) {
   state.sending = true;
   addMessage("user", text);
   const body = addMessage("assistant", "");
+  const stream = markdownStream(body);
   body.parentElement.classList.add("streaming");
 
   try {
@@ -173,13 +269,13 @@ async function send(text) {
       buffer += decoder.decode(value, { stream: true });
       let index;
       while ((index = buffer.indexOf("\n\n")) >= 0) {
-        handleFrame(buffer.slice(0, index), body);
+        handleFrame(buffer.slice(0, index), stream);
         buffer = buffer.slice(index + 2);
       }
     }
-    messagesView.scrollTop = messagesView.scrollHeight;
+    stream.finish();
   } catch (error) {
-    body.textContent = `出错了：${error.message}`;
+    stream.error(error.message);
   } finally {
     body.parentElement.classList.remove("streaming");
     state.sending = false;

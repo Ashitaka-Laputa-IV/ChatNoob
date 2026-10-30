@@ -209,8 +209,164 @@ textarea:focus {
 }
 
 .msg .body {
-  white-space: pre-wrap;
   word-break: break-word;
+  min-width: 0;
+}
+
+.msg .body.plain {
+  white-space: pre-wrap;
+}
+
+/* Markdown 正文 */
+
+.msg .body.md > :first-child {
+  margin-top: 0;
+}
+
+.msg .body.md > :last-child {
+  margin-bottom: 0;
+}
+
+.msg .body.md p,
+.msg .body.md ul,
+.msg .body.md ol,
+.msg .body.md blockquote,
+.msg .body.md table {
+  margin: 0 0 10px;
+}
+
+.msg .body.md h1,
+.msg .body.md h2,
+.msg .body.md h3,
+.msg .body.md h4,
+.msg .body.md h5,
+.msg .body.md h6 {
+  margin: 16px 0 8px;
+  line-height: 1.3;
+}
+
+.msg .body.md h1 {
+  font-size: 20px;
+}
+
+.msg .body.md h2 {
+  font-size: 18px;
+}
+
+.msg .body.md h3 {
+  font-size: 16px;
+}
+
+.msg .body.md h4,
+.msg .body.md h5,
+.msg .body.md h6 {
+  font-size: 15px;
+}
+
+.msg .body.md ul,
+.msg .body.md ol {
+  padding-left: 22px;
+}
+
+.msg .body.md li + li {
+  margin-top: 2px;
+}
+
+.msg .body.md a {
+  color: #6ea8fe;
+  text-decoration: none;
+}
+
+.msg .body.md a:hover {
+  text-decoration: underline;
+}
+
+.msg .body.md blockquote {
+  padding-left: 12px;
+  border-left: 3px solid #2a2f3a;
+  color: #aab3c2;
+}
+
+.msg .body.md hr {
+  border: 0;
+  border-top: 1px solid #2a2f3a;
+  margin: 16px 0;
+}
+
+.msg .body.md table {
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+}
+
+.msg .body.md th,
+.msg .body.md td {
+  border: 1px solid #2a2f3a;
+  padding: 6px 10px;
+}
+
+.msg .body.md th {
+  background: #171a21;
+}
+
+.msg .body.md img {
+  max-width: 100%;
+  border-radius: 8px;
+}
+
+.msg .body.md :not(pre) > code {
+  background: #1b1f27;
+  border: 1px solid #262b35;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font: 13px/1.5 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+}
+
+/* 代码块 */
+
+.code-block {
+  margin: 0 0 10px;
+  border: 1px solid #262b35;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #0b0e14;
+}
+
+.code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px 4px 12px;
+  background: #151922;
+  border-bottom: 1px solid #262b35;
+  font-size: 12px;
+  color: #8b95a7;
+}
+
+.copy-code {
+  border: none;
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 12px;
+  color: #8b95a7;
+}
+
+.copy-code:hover {
+  background: #1f2530;
+  color: #e6e6e6;
+  border-color: transparent;
+}
+
+.code-block pre {
+  margin: 0;
+}
+
+.code-block pre code.hljs {
+  display: block;
+  overflow-x: auto;
+  padding: 12px 14px;
+  background: transparent;
+  font: 13px/1.55 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
 }
 
 .msg.assistant.streaming .body::after {
