@@ -21,7 +21,10 @@ SYSTEM_PROMPT = "你是一个简洁友好的中文助手，回答尽量短小精
 
 # 记忆（checkpoint）落盘位置，与启动目录无关
 DB_PATH = Path.home() / ".chatnoob" / "checkpoints.db"
-THREAD_ID = "default"
+
+# 用户名直接作为 thread_id，一个用户对应一条线程
+DEFAULT_USER = "default"
+HISTORY_LIMIT = 10  # /history 无参数时打印的条数
 
 warnings.filterwarnings("ignore", message="The v3 streaming protocol")
 
@@ -33,7 +36,8 @@ def main() -> None:
 
     console = Console()
     model = init_chat_model(MODEL)
-    config = {"configurable": {"thread_id": THREAD_ID}}
+    user = DEFAULT_USER  # 每次启动都从 default 开始，不记住上次的用户
+    config = {"configurable": {"thread_id": user}}
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     with SqliteSaver.from_conn_string(str(DB_PATH)) as checkpointer:
@@ -52,23 +56,69 @@ def main() -> None:
         )
 
         console.print(Panel.fit(
-            "[bold cyan]ChatNoob[/] [dim]· /clear 清空记忆 · /exit 退出[/]",
+            "[bold cyan]ChatNoob[/] [dim]· /switch 切换用户 · /history 历史"
+            " · /clear 清空 · /exit 退出[/]",
             border_style="cyan", padding=(0, 1),
         ))
         console.print(f"[dim]记忆保存在 {DB_PATH}[/dim]")
 
         while True:
             try:
-                message = console.input("[bold cyan]你 › [/]").strip()
+                message = console.input(f"[bold cyan]{user} › [/]").strip()
             except (EOFError, KeyboardInterrupt):
                 break
             if not message:
                 continue
-            if message == "/exit":
-                break
-            if message == "/clear":
-                checkpointer.delete_thread(THREAD_ID)
-                console.print("[dim]记忆已清空[/]")
+
+            if message.startswith("/"):
+                cmd, *args = message.split()
+
+                if cmd == "/exit":
+                    break
+
+                if cmd == "/switch":
+                    user = args[0] if args else DEFAULT_USER
+                    config = {"configurable": {"thread_id": user}}
+                    console.print(f"[dim]已切换到 {user}[/]")
+
+                elif cmd == "/clear":
+                    target = args[0] if args else user
+                    checkpointer.delete_thread(target)
+                    console.print(f"[dim]已清空 {target} 的记忆[/]")
+
+                elif cmd == "/history":
+                    count = HISTORY_LIMIT
+                    if args:
+                        if args[0].isdigit() and int(args[0]) > 0:
+                            count = int(args[0])
+                        else:
+                            console.print("[dim]条数需要是正整数，按默认值处理[/]")
+                    history = agent.get_state(config).values.get("messages", [])
+                    if not history:
+                        console.print("[dim]暂无历史消息[/]")
+                    else:
+                        console.print()
+                        for past in history[-count:]:
+                            if past.type == "ai":
+                                label = REPLY_LABEL
+                            elif past.type == "tool":
+                                label = Text(f"工具 {past.name or '?'} › ", style="dim")
+                            elif past.type == "human" and past.additional_kwargs.get(
+                                "lc_source"
+                            ) == "summarization":
+                                # SummarizationMiddleware 生成的摘要也是 HumanMessage
+                                label = Text("摘要 › ", style="dim")
+                            elif past.type == "human":
+                                label = Text(f"{user} › ", style="bold cyan")
+                            else:
+                                label = Text("系统 › ", style="dim")
+                            console.print(Group(label, Markdown(past.text or "")))
+                        console.print()
+
+                else:
+                    console.print(
+                        f"[dim]未知命令 {cmd}，可用：/switch /clear /history /exit[/]"
+                    )
                 continue
 
             console.rule(style="dim")
