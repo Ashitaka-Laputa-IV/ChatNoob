@@ -19,10 +19,21 @@ UPDATE checkpoints SET thread_id = thread_id || ':1' WHERE instr(thread_id, ':')
 UPDATE writes      SET thread_id = thread_id || ':1' WHERE instr(thread_id, ':') = 0;
 """
 
+# 新建但还没说话的会话不会有 checkpoint，单独记一行，否则列表里看不到
+SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS chatnoob_sessions (
+    user    TEXT NOT NULL,
+    session INTEGER NOT NULL,
+    PRIMARY KEY (user, session)
+);
+"""
+
 _LIST_SQL = "SELECT thread_id, MAX(checkpoint_id) FROM checkpoints GROUP BY thread_id"
+_RESERVED_SQL = "SELECT session FROM chatnoob_sessions WHERE user = ?"
 
 _locks: dict[str, asyncio.Lock] = {}
 _locks_guard = asyncio.Lock()
+_alloc_guard = asyncio.Lock()
 
 
 def thread_id(user: str, session: int) -> str:
@@ -54,29 +65,51 @@ async def migrate(conn: Any) -> None:
     await conn.commit()
 
 
+async def ensure_schema(conn: Any) -> None:
+    await conn.executescript(SCHEMA_SQL)
+    await conn.commit()
+
+
 async def sessions(conn: Any, user: str) -> list[tuple[int, str]]:
-    """返回该用户的 [(会话编号, 最新 checkpoint_id)]，按编号升序。"""
+    """返回该用户的 [(会话编号, 最新 checkpoint_id)]，按编号升序。
+
+    新建但还没发过消息的会话只有预留记录，checkpoint_id 为空字符串。
+    """
     rows = await conn.execute_fetchall(_LIST_SQL)
-    found = []
+    reserved = await conn.execute_fetchall(_RESERVED_SQL, (user,))
+    found: dict[int, str] = {int(number): "" for (number,) in reserved}
     for tid, last in rows:
         parsed = split_thread_id(tid)
         if parsed is not None and parsed[0] == user:
-            found.append((parsed[1], last or ""))
-    found.sort()
-    return found
+            found[parsed[1]] = last or ""
+    return sorted(found.items())
 
 
 async def latest_session(conn: Any, user: str) -> int | None:
-    """最近活跃的会话编号；checkpoint_id 单调递增，取最大的即可。"""
+    """最新创建的会话编号（编号在用户内自增，最大的就是最新的）。"""
     found = await sessions(conn, user)
-    if not found:
-        return None
-    return max(found, key=lambda item: item[1])[0]
+    return found[-1][0] if found else None
 
 
 async def next_session(conn: Any, user: str) -> int:
-    found = await sessions(conn, user)
-    return max((number for number, _ in found), default=0) + 1
+    """分配并预留一个新会话编号。"""
+    async with _alloc_guard:
+        found = await sessions(conn, user)
+        number = max((item[0] for item in found), default=0) + 1
+        await conn.execute(
+            "INSERT INTO chatnoob_sessions (user, session) VALUES (?, ?)",
+            (user, number),
+        )
+        await conn.commit()
+        return number
+
+
+async def release_session(conn: Any, user: str, session: int) -> None:
+    await conn.execute(
+        "DELETE FROM chatnoob_sessions WHERE user = ? AND session = ?",
+        (user, session),
+    )
+    await conn.commit()
 
 
 async def lock_for(tid: str) -> asyncio.Lock:

@@ -9,10 +9,20 @@ uv sync
 cp .env.example .env   # 填入 DEEPSEEK_API_KEY
 
 uv run chatnoob         # 终端交互
-uv run chatnoob-serve   # HTTP 服务，默认 127.0.0.1:8000
+uv run chatnoob-serve   # HTTP 服务 + 前端，默认 127.0.0.1:8000
 ```
 
 环境变量 `CHATNOOB_HOST` / `CHATNOOB_PORT` 可以改监听地址。
+
+## 网页界面
+
+打开 `http://127.0.0.1:8000/`：
+
+- 首页输入用户名「登录」（无鉴权，名字即身份）
+- 左栏是该用户的会话列表，可新建、切换、删除
+- 主区域是对话，助手回复通过 SSE 逐字流式显示
+
+前端是原生 HTML/CSS/JS，放在 `src/chatnoob/static/`，由 FastAPI 直接托管，不需要构建步骤。
 
 ## HTTP API
 
@@ -24,6 +34,7 @@ uv run chatnoob-serve   # HTTP 服务，默认 127.0.0.1:8000
 | GET | `/sessions/{n}/history?user=alice&limit=10` | 最近若干条历史 |
 | DELETE | `/sessions/{n}?user=alice` | 物理删除该会话 |
 | GET | `/health` | 存活检查 |
+| GET | `/` | 网页界面 |
 
 SSE 事件：
 
@@ -42,6 +53,7 @@ event: error   data: {"detail": "..."}
 - `init_chat_model("deepseek:deepseek-chat")` + `create_agent`，消息由 `MessagesState` 管理
 - `SqliteSaver` / `AsyncSqliteSaver` 把记忆落盘到 `~/.chatnoob/checkpoints.db`
 - `thread_id` 形如 `alice:1`：一个用户下可以有多条会话，编号在用户内自增；旧版本留下的裸用户名会在启动时迁移成 `用户名:1`
+- 新建但还没发消息的会话没有 checkpoint，编号记在 `chatnoob_sessions` 表里，保证列表能看到、编号不重复
 - `SummarizationMiddleware` 在历史超过 20 条消息时自动把较早对话摘要压缩，只保留最近 2 条；摘要单独输出，不混进回答
 - `stream_events(..., version="v3")` 流式输出，CLI 用 Rich `Live` 实时渲染
 - 终端命令（CLI 固定使用每个用户的第 1 个会话）：
@@ -50,4 +62,4 @@ event: error   data: {"detail": "..."}
   - `/clear [用户]` 物理删除该用户第 1 个会话的 checkpoint，无参数清理当前用户
   - `/exit` 退出
 
-代码分布：`__init__.py`（CLI）、`agent.py`（模型与中间件）、`store.py`（会话标识与枚举）、`api.py`（HTTP 服务）。
+代码分布：`__init__.py`（CLI）、`agent.py`（模型与中间件）、`store.py`（会话标识与枚举）、`api.py`（HTTP 服务）、`static/`（网页界面）。

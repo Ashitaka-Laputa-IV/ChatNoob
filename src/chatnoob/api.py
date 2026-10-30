@@ -6,11 +6,13 @@ import json
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from langchain_core.messages import BaseMessage
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from pydantic import BaseModel, Field
@@ -48,6 +50,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # 写入排队 30 秒，避免多进程同时写时报 database is locked
         await saver.conn.execute("PRAGMA busy_timeout=30000")
         await store.migrate(saver.conn)
+        await store.ensure_schema(saver.conn)
         app.state.saver = saver
         app.state.agent = build_agent(saver)
         yield
@@ -127,6 +130,7 @@ async def delete_session(
     user = _user(user)
     tid = store.thread_id(user, session)
     await app.state.saver.adelete_thread(tid)
+    await store.release_session(app.state.saver.conn, user, session)
     return {"deleted": tid}
 
 
@@ -176,6 +180,16 @@ async def chat(body: ChatIn) -> StreamingResponse:
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+STATIC_DIR = Path(__file__).parent / "static"
+
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+@app.get("/", include_in_schema=False)
+async def index() -> FileResponse:
+    return FileResponse(STATIC_DIR / "index.html")
 
 
 def serve() -> None:

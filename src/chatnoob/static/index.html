@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ChatNoob</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <section id="login" class="login">
+      <h1>ChatNoob</h1>
+      <form id="login-form">
+        <input id="login-name" placeholder="输入用户名" autocomplete="off" required />
+        <button type="submit">进入</button>
+      </form>
+      <p class="hint">用户名决定你能看到哪些会话</p>
+    </section>
+
+    <main id="app" class="app hidden">
+      <aside class="sidebar">
+        <div class="sidebar-head">
+          <span id="current-user"></span>
+          <button id="logout" class="ghost" title="切换用户">切换</button>
+        </div>
+        <button id="new-session" class="primary">+ 新建会话</button>
+        <ul id="session-list"></ul>
+      </aside>
+
+      <section class="chat">
+        <div id="messages" class="messages"></div>
+        <form id="chat-form" class="composer">
+          <textarea
+            id="chat-input"
+            rows="1"
+            placeholder="说点什么…（Enter 发送，Shift+Enter 换行）"
+          ></textarea>
+          <button type="submit" class="primary">发送</button>
+        </form>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
