@@ -1,12 +1,13 @@
 # AGENTS.md
 
-ChatNoob is a Python 3.14 project managed with `uv` (package `chatnoob`, layout `src/chatnoob`). Early stage: one `main()` entry point, no tests or linters.
+ChatNoob is a Python 3.14 project managed with `uv` (package `chatnoob`, layout `src/chatnoob`). Early stage: no tests or linters.
 
 ## Commands
 
 `.venv` is local and git-ignored.
 
-- Run: `uv run chatnoob`
+- Run CLI: `uv run chatnoob`
+- Run server: `uv run chatnoob-serve` (FastAPI + SSE on `127.0.0.1:8000`, override with `CHATNOOB_HOST` / `CHATNOOB_PORT`)
 - Sync: `uv sync`
 - Add dependency: `uv add <package>`
 - Pin interpreter: `uv venv --python 3.14`

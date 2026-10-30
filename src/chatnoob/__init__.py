@@ -3,12 +3,8 @@
 from __future__ import annotations
 
 import warnings
-from pathlib import Path
 
 from dotenv import load_dotenv
-from langchain.agents import create_agent
-from langchain.agents.middleware import SummarizationMiddleware
-from langchain.chat_models import init_chat_model
 from langgraph.checkpoint.sqlite import SqliteSaver
 from rich.console import Console, Group
 from rich.live import Live
@@ -16,15 +12,8 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.text import Text
 
-MODEL = "deepseek:deepseek-chat"
-SYSTEM_PROMPT = "你是一个简洁友好的中文助手，回答尽量短小精悍。"
-
-# 记忆（checkpoint）落盘位置，与启动目录无关
-DB_PATH = Path.home() / ".chatnoob" / "checkpoints.db"
-
-# 用户名直接作为 thread_id，一个用户对应一条线程
-DEFAULT_USER = "default"
-HISTORY_LIMIT = 10  # /history 无参数时打印的条数
+from . import store
+from .agent import build_agent
 
 warnings.filterwarnings("ignore", message="The v3 streaming protocol")
 
@@ -35,32 +24,21 @@ def main() -> None:
     load_dotenv()
 
     console = Console()
-    model = init_chat_model(MODEL)
-    user = DEFAULT_USER  # 每次启动都从 default 开始，不记住上次的用户
-    config = {"configurable": {"thread_id": user}}
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    # CLI 只用每个用户的第 1 个会话，多会话走 HTTP 服务
+    user = store.DEFAULT_USER  # 每次启动都从 default 开始，不记住上次的用户
+    config = {"configurable": {"thread_id": store.thread_id(user, 1)}}
+    store.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-    with SqliteSaver.from_conn_string(str(DB_PATH)) as checkpointer:
-        agent = create_agent(
-            model,
-            system_prompt=SYSTEM_PROMPT,
-            checkpointer=checkpointer,  # 本地 SQLite 记忆，重启后仍在
-            middleware=[
-                # 历史超过 20 条消息时把更早的对话压成摘要, 保留最近两条.
-                SummarizationMiddleware(
-                    model=model,
-                    trigger=("messages", 20),
-                    keep=("messages", 2),
-                ),
-            ],
-        )
+    with SqliteSaver.from_conn_string(str(store.DB_PATH)) as checkpointer:
+        store.migrate_sync(checkpointer.conn)
+        agent = build_agent(checkpointer)  # 本地 SQLite 记忆，重启后仍在
 
         console.print(Panel.fit(
             "[bold cyan]ChatNoob[/] [dim]· /switch 切换用户 · /history 历史"
             " · /clear 清空 · /exit 退出[/]",
             border_style="cyan", padding=(0, 1),
         ))
-        console.print(f"[dim]记忆保存在 {DB_PATH}[/dim]")
+        console.print(f"[dim]记忆保存在 {store.DB_PATH}[/dim]")
 
         while True:
             try:
@@ -77,17 +55,17 @@ def main() -> None:
                     break
 
                 if cmd == "/switch":
-                    user = args[0] if args else DEFAULT_USER
-                    config = {"configurable": {"thread_id": user}}
+                    user = args[0] if args else store.DEFAULT_USER
+                    config = {"configurable": {"thread_id": store.thread_id(user, 1)}}
                     console.print(f"[dim]已切换到 {user}[/]")
 
                 elif cmd == "/clear":
                     target = args[0] if args else user
-                    checkpointer.delete_thread(target)
+                    checkpointer.delete_thread(store.thread_id(target, 1))
                     console.print(f"[dim]已清空 {target} 的记忆[/]")
 
                 elif cmd == "/history":
-                    count = HISTORY_LIMIT
+                    count = store.HISTORY_LIMIT
                     if args:
                         if args[0].isdigit() and int(args[0]) > 0:
                             count = int(args[0])
