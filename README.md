@@ -52,7 +52,7 @@ event: error   data: {"detail": "..."}
 
 ## 实现
 
-- `init_chat_model("deepseek:deepseek-chat")` + `create_agent`，消息由 `MessagesState` 管理
+- `init_chat_model("deepseek:deepseek-chat")` + `create_agent`，消息由 `MessagesState` 管理；通过 `extra_body` 关闭 DeepSeek 思考模式，降低首字延迟
 - `SqliteSaver` / `AsyncSqliteSaver` 把记忆落盘到 `~/.chatnoob/checkpoints.db`
 - `thread_id` 形如 `alice:1`：一个用户下可以有多条会话，编号在用户内自增；旧版本留下的裸用户名会在启动时迁移成 `用户名:1`
 - 新建但还没发消息的会话没有 checkpoint，编号记在 `chatnoob_sessions` 表里，保证列表能看到、编号不重复

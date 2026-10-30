@@ -16,7 +16,8 @@ SYSTEM_PROMPT = "你是一个简洁友好的中文助手，回答尽量短小精
 def build_agent(checkpointer: Any) -> Any:
     """按给定 checkpointer 组装 agent，同步与异步 saver 都适用。"""
     load_dotenv()  # CLI 与 HTTP 服务都从这里拿到 DEEPSEEK_API_KEY
-    model = init_chat_model(MODEL)
+    # DeepSeek V4 默认开启思考模式；关掉后首字更快，闲聊场景也用不上推理。
+    model = init_chat_model(MODEL, extra_body={"thinking": {"type": "disabled"}})
     return create_agent(
         model,
         system_prompt=SYSTEM_PROMPT,
