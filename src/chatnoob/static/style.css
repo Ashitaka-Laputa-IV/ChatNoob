@@ -208,6 +208,24 @@ textarea:focus {
   font-size: 13px;
 }
 
+.msg.tool {
+  opacity: 0.8;
+  font-size: 13px;
+}
+
+.msg.tool .who {
+  color: #7f8aa0;
+}
+
+.msg.tool .body {
+  font: 12.5px/1.5 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  color: #9fb3d1;
+  background: #141821;
+  border: 1px solid #232936;
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
 .msg .body {
   word-break: break-word;
   min-width: 0;

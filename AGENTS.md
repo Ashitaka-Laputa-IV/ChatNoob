@@ -11,7 +11,7 @@ ChatNoob is a Python 3.14 project managed with `uv` (package `chatnoob`, layout 
 - Sync: `uv sync`
 - Add dependency: `uv add <package>`
 - Pin interpreter: `uv venv --python 3.14`
-- Test/lint/typecheck: none configured. Don't invent commands; record the exact ones here once added.
+- Test: `uv run --no-sync pytest --cov=chatnoob --cov-report=term-missing`（`chatnoob-serve` 占用 exe 时也能跑；首次先 `uv sync`。Python 覆盖率 100%，保持住）
 
 ## Conventions
 

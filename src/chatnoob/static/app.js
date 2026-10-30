@@ -107,6 +107,15 @@ const LABELS = { user: () => state.user, assistant: "ChatNoob", summary: "摘要
 const ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" };
 const escapeHtml = (text) => text.replace(/[&<>"]/g, (char) => ESCAPES[char]);
 
+// MCP 文档里的链接常是相对路径（/oss/python/...），浏览器会错误地拼到本站
+const DOCS_ORIGIN = "https://docs.langchain.com";
+
+function absoluteHref(href) {
+  if (!href) return href;
+  if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(href)) return href;
+  return new URL(href, DOCS_ORIGIN).href;
+}
+
 const markdown = new marked.Marked({ gfm: true, breaks: true });
 markdown.use({
   renderer: {
@@ -129,8 +138,9 @@ markdown.use({
     },
     link({ href, title, tokens }) {
       const text = this.parser.parseInline(tokens);
+      const target = absoluteHref(href);
       const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
-      return `<a href="${escapeHtml(href)}"${titleAttr}>${text}</a>`;
+      return `<a href="${escapeHtml(target)}"${titleAttr}>${text}</a>`;
     },
   },
 });
@@ -178,7 +188,7 @@ function markdownStream(body) {
   };
 }
 
-function addMessage(role, text) {
+function addMessage(role, text, before = null) {
   const wrap = document.createElement("div");
   wrap.className = `msg ${role}`;
 
@@ -198,7 +208,8 @@ function addMessage(role, text) {
   }
 
   wrap.append(who, body);
-  messagesView.append(wrap);
+  if (before) messagesView.insertBefore(wrap, before);
+  else messagesView.append(wrap);
   scrollToBottom();
   return body;
 }
@@ -221,7 +232,14 @@ messagesView.addEventListener("click", async (event) => {
 
 /* ---------- SSE ---------- */
 
-function handleFrame(frame, stream) {
+function toolText(payload) {
+  const args = payload.input && Object.keys(payload.input).length
+    ? JSON.stringify(payload.input)
+    : "";
+  return args ? `${payload.name} ${args}` : payload.name;
+}
+
+function handleFrame(frame, stream, assistantWrap, toolBodies) {
   let event = "message";
   let data = "";
   for (const line of frame.split("\n")) {
@@ -234,6 +252,18 @@ function handleFrame(frame, stream) {
     stream.push(payload.text);
   } else if (event === "summary") {
     addMessage("summary", payload.text);
+  } else if (event === "tool") {
+    if (payload.status === "start") {
+      const body = addMessage("tool", toolText(payload), assistantWrap);
+      toolBodies.set(payload.id, body);
+    } else {
+      const body = toolBodies.get(payload.id);
+      if (body) {
+        body.textContent += payload.status === "done"
+          ? "\n✓ 完成"
+          : `\n✗ ${payload.error || "失败"}`;
+      }
+    }
   } else if (event === "done" && state.session === null) {
     state.session = payload.session;
     renderSessions();
@@ -247,6 +277,8 @@ async function send(text) {
   state.sending = true;
   addMessage("user", text);
   const body = addMessage("assistant", "");
+  const assistantWrap = body.parentElement;
+  const toolBodies = new Map();
   const stream = markdownStream(body);
   body.parentElement.classList.add("streaming");
 
@@ -269,7 +301,7 @@ async function send(text) {
       buffer += decoder.decode(value, { stream: true });
       let index;
       while ((index = buffer.indexOf("\n\n")) >= 0) {
-        handleFrame(buffer.slice(0, index), stream);
+        handleFrame(buffer.slice(0, index), stream, assistantWrap, toolBodies);
         buffer = buffer.slice(index + 2);
       }
     }

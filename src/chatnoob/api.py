@@ -19,10 +19,15 @@ from pydantic import BaseModel, Field
 
 from . import store
 from .agent import build_agent
+from .stream import stream_agent
 
 
 def _sse(event: str, data: dict[str, Any]) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def _truncate(text: str, limit: int = 500) -> str:
+    return text if len(text) <= limit else f"{text[:limit]}…"
 
 
 def _serialize(message: BaseMessage) -> dict[str, str]:
@@ -39,7 +44,11 @@ def _serialize(message: BaseMessage) -> dict[str, str]:
         role = "tool"
     else:
         role = "system"
-    return {"role": role, "text": message.text or ""}
+    text = message.text or ""
+    # 工具结果可能是整页文档，历史里只留可读的开头
+    if role == "tool":
+        text = _truncate(text)
+    return {"role": role, "text": text}
 
 
 @asynccontextmanager
@@ -52,7 +61,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await store.migrate(saver.conn)
         await store.ensure_schema(saver.conn)
         app.state.saver = saver
-        app.state.agent = build_agent(saver)
+        app.state.agent = await build_agent(saver)
         yield
 
 
@@ -117,10 +126,14 @@ async def read_history(
     tid = store.thread_id(user, session)
     state = await app.state.agent.aget_state({"configurable": {"thread_id": tid}})
     messages = state.values.get("messages", [])
-    return {
-        "session": session,
-        "messages": [_serialize(message) for message in messages[-limit:]],
-    }
+    serialized = [_serialize(message) for message in messages]
+    # 带工具调用的 AI 消息正文为空，历史里不显示空气泡
+    serialized = [
+        item
+        for item in serialized
+        if item["role"] != "assistant" or item["text"].strip()
+    ]
+    return {"session": session, "messages": serialized[-limit:]}
 
 
 @app.delete("/sessions/{session}")
@@ -140,26 +153,40 @@ async def _stream(
     yield _sse("start", {"session": session})
     try:
         async with lock:
-            run = await agent.astream_events(
-                {"messages": [{"role": "user", "content": message}]},
-                config={"configurable": {"thread_id": tid}},
-                version="v3",
-            )
             reply = ""
             summary = ""
-            async with run:
-                async for chunk in run.messages:
-                    if chunk.node != "model":
-                        # 摘要等中间件内部调用单独走 summary 事件
-                        async for delta in chunk.text:
-                            summary += delta
-                        continue
-                    async for delta in chunk.text:
-                        reply += delta
-                        yield _sse("token", {"text": delta})
+            stats: dict[str, Any] = {}
+            async for kind, payload in stream_agent(
+                agent,
+                {"messages": [{"role": "user", "content": message}]},
+                {"configurable": {"thread_id": tid}},
+            ):
+                if kind == "token":
+                    reply += payload
+                    yield _sse("token", {"text": payload})
+                elif kind == "summary":
+                    summary += payload
+                elif kind == "tool_start":
+                    yield _sse("tool", {
+                        "id": payload.tool_call_id,
+                        "name": payload.tool_name,
+                        "input": payload.input,
+                        "status": "start",
+                    })
+                elif kind == "tool_end":
+                    data: dict[str, Any] = {
+                        "id": payload.tool_call_id,
+                        "name": payload.tool_name,
+                        "status": "error" if payload.error else "done",
+                    }
+                    if payload.error:
+                        data["error"] = str(payload.error)
+                    yield _sse("tool", data)
+                elif kind == "stats":
+                    stats = payload
         if summary.strip():
             yield _sse("summary", {"text": summary.strip()})
-        yield _sse("done", {"session": session, "reply": reply})
+        yield _sse("done", {"session": session, "reply": reply, "stats": stats})
     except Exception as exc:  # 流内异常只能作为事件返回
         yield _sse("error", {"detail": str(exc)})
 
